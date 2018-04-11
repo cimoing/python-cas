@@ -57,10 +57,11 @@ class CASClientBase(object):
 
     def __init__(self, service_url=None, server_url=None,
                  extra_login_params=None, renew=False,
-                 username_attribute=None):
+                 username_attribute=None, verify_server_ca=True):
 
         self.service_url = service_url
         self.server_url = server_url
+        self.verify_server_ca = verify_server_ca
         self.extra_login_params = extra_login_params or {}
         self.renew = renew
         self.username_attribute = username_attribute
@@ -96,7 +97,8 @@ class CASClientBase(object):
 
     def get_proxy_ticket(self, pgt):
         """Returns proxy ticket given the proxy granting ticket"""
-        response = requests.get(self.get_proxy_url(pgt))
+        response = requests.get(self.get_proxy_url(pgt),
+                                verify=self.verify_server_ca)
         if response.status_code == 200:
             from lxml import etree
             root = etree.fromstring(response.content)
@@ -128,7 +130,7 @@ class CASClientV1(CASClientBase):
         params = [('ticket', ticket), ('service', self.service_url)]
         url = (urllib_parse.urljoin(self.server_url, 'validate') + '?' +
                urllib_parse.urlencode(params))
-        page = requests.get(url, stream=True)
+        page = requests.get(url, stream=True, verify=self.verify_server_ca)
         try:
             page_iterator = page.iter_lines(chunk_size=8192)
             verified = next(page_iterator).strip()
@@ -164,7 +166,7 @@ class CASClientV2(CASClientBase):
         if self.proxy_callback:
             params.update({'pgtUrl': self.proxy_callback})
         base_url = urllib_parse.urljoin(self.server_url, self.url_suffix)
-        page = requests.get(base_url, params=params)
+        page = requests.get(base_url, params=params, verify=self.verify_server_ca)
         try:
             return page.content
         finally:
@@ -328,7 +330,8 @@ class CASClientWithSAMLV1(CASClientV2, SingleLogoutMixin):
             saml_validate_url,
             self.get_saml_assertion(ticket),
             params=params,
-            headers=headers)
+            headers=headers,
+            verify=self.verify_server_ca)
 
     @classmethod
     def get_saml_assertion(cls, ticket):
